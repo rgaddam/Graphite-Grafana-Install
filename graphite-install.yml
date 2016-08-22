@@ -4,9 +4,7 @@
 
   tasks:
   - name: run a general yum update
-    yum: 
-        name: '*'
-        state: latest
+    yum: name: '*' state: latest
         
   - name: permanent disable SELinux
     shell: sed -i s/SELINUX=enforcing/SELINUX=disabled/ /etc/selinux/config
