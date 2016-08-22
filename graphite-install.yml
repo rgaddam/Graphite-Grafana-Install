@@ -1,7 +1,5 @@
 ---
 - hosts: '{{ hosts }}'
-#  roles:
-#  - common
   sudo: yes
 
   tasks:
@@ -9,7 +7,7 @@
     yum: 
         name: '*'
         state: latest
-
+        
   - name: permanent disable SELinux
     shell: sed -i s/SELINUX=enforcing/SELINUX=disabled/ /etc/selinux/config
     ignore_errors: yes
@@ -33,23 +31,20 @@
        - MySQL-python
 
   - name: download get-pip 
-    get_url: url=https://bootstrap.pypa.io/get-pip.py dest=/var/tmp/  mode: 0755  validate_certs: no
+    get_url: url=https://bootstrap.pypa.io/get-pip.py dest=/var/tmp/ mode=0755 validate_certs=no
 
   - name: run get-pip.py to install pip
     shell: /usr/bin/python /var/tmp/get-pip.py 
 
   - name: pip install carbon
     shell: pip install carbon --install-option="--prefix=/opt/graphite" 
-    #shell: pip install carbon --install-option="--prefix=/opt/graphite" --install-option="--install-lib=/usr/lib/python2.7/site-packages"
 
   - name: pip install whisper
     shell: pip install whisper --install-option="--prefix=/opt/graphite" 
-    #shell: pip install whisper --install-option="--prefix=/opt/graphite" --install-option="--install-lib=/usr/lib/python2.7/site-packages"
-
+    
   - name: pip install graphite-web
     shell: pip install graphite-web --install-option="--prefix=/opt/graphite" 
-    #shell: pip install graphite-web --install-option="--prefix=/opt/graphite" --install-option="--install-lib=/usr/lib/python2.7/site-packages"
-
+ 
   # Only if NOT using the --install-lib option above
   - name: Add graphite python site-packages directory to python path (mkdir for lib.pth file) (/root/.local/lib/python2.7/site-packages/)
     file: path=/root/.local/lib/python2.7/site-packages/ mode=0755 owner=root group=root state=directory
