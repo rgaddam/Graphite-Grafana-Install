@@ -1,13 +1,13 @@
-Building a graphite host through ansible in OpenStack 
-
+# Building a graphite host through ansible in OpenStack 
 
 This playbook is to install graphite and grafana with its dependencies.
 
-Intro: 
+Introduction: 
+
 There is graPHite (ph) and then there is graFana (f). Graphite is the main tool that collects the data for graphing. It also has a simple graphing tool.
 Grafana sits on top of graphite. It is a much prettier and versatile graphing tool. It uses the data in graphite.
 
-Login to OpenStack Console
+Building OpenStack Console: 
 Choose Managing region from the dropdown. Click on "Instances"
 Upper right - click on the box "+ Launch Instance"
 On the pop-up window
@@ -36,19 +36,16 @@ Install Grafana & dependencies:
 Once the host is built and you are able to access over ssh, you can run the graphite-install.yml playbook to install all graphite and grafana with all the needed dependencies.
 
 Run the playbook against the host you want to build:
-ansible-playbook graphite-install.yml 
 
-Verify Installation
-Browse to the URL http://<ip_address_of_server>
-You should see a Graphite page.
+# ansible-playbook graphite-install.yml 
 
+Verify Installation  --  http://<ip_address_of_server>
 
 Need to add one A record for graphite and one CNAME record for grafana and both will point to the fqdn of the graphite host
 
 Apache Configuration: 
 
 The apache configuration, a virtual server will be configured so that two webpages resolve the graphite page & the grafana page.
-
 Three files need to be modifed
 
 /etc/httpd/conf.d/01_graphite.conf
