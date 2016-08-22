@@ -1,11 +1,11 @@
-# Building a graphite host through ansible in OpenStack 
-
-This playbook is to install graphite and grafana with its dependencies.
+# This playbook is to install graphite and grafana with its dependencies.
 
 Introduction: 
 
 There is graPHite (ph) and then there is graFana (f). Graphite is the main tool that collects the data for graphing. It also has a simple graphing tool.
 Grafana sits on top of graphite. It is a much prettier and versatile graphing tool. It uses the data in graphite.
+
+# Building a graphite host on OpenStack 
 
 Building OpenStack Console: 
 Choose Managing region from the dropdown. Click on "Instances"
