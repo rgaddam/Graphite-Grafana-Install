@@ -1,0 +1,141 @@
+Building a graphite host through ansible in OpenStack 
+
+
+This playbook is to install graphite and grafana with its dependencies.
+
+Intro: 
+There is graPHite (ph) and then there is graFana (f). Graphite is the main tool that collects the data for graphing. It also has a simple graphing tool.
+Grafana sits on top of graphite. It is a much prettier and versatile graphing tool. It uses the data in graphite.
+
+Login to OpenStack Console
+Choose Managing region from the dropdown. Click on "Instances"
+Upper right - click on the box "+ Launch Instance"
+On the pop-up window
+
+'Details' tab:
+Availability Zone - Nova
+Instance name - this can be your choice... see the table above for existing names.
+Flavor - needs to be "m1.xlarge | 16GB RAM | 8 VCPU | 20.0GB Disk"
+Instance Boot Source - "Cloud CentOS 6.6 x86_64 v1.2" .
+Security Tab
+Keypair - will be yours
+Click the '+' to upload your ssh key if you haven't before.
+this is critical or no one will have access to the box.
+Admin Pass - you can leave this blank
+Security Groups - select the "default" and "graphite" Security Groups.
+Networking Tab
+Add the PublicBlue network by clicking the '+' in the Available Networks box. It will move from the Available Networks area to the Selected Networks area.
+Click "launch" to build the host.
+Look for your new instance in the list... find your new ip address.
+You should be able to access the host over ssh with your user account. 
+Verify you can access with ssh username <ip_address>
+
+
+Install Grafana & dependencies:
+
+Once the host is built and you are able to access over ssh, you can run the graphite-install.yml playbook to install all graphite and grafana with all the needed dependencies.
+
+Run the playbook against the host you want to build:
+ansible-playbook graphite-install.yml 
+
+Verify Installation
+Browse to the URL http://<ip_address_of_server>
+You should see a Graphite page.
+
+
+Need to add one A record for graphite and one CNAME record for grafana and both will point to the fqdn of the graphite host
+
+Apache Configuration: 
+
+The apache configuration, a virtual server will be configured so that two webpages resolve the graphite page & the grafana page.
+
+Three files need to be modifed
+
+/etc/httpd/conf.d/01_graphite.conf
+/etc/httpd/conf.d/02_grafana.conf
+/usr/share/grafana/config.js
+/etc/httpd/conf.d/01_graphite.conf
+Set ServerName parameter to the fqnd of graphite 
+Set Access-Control-Origin to the fqnd of grafana
+
+example /etc/httpd/conf.d/01_graphite.conf file
+# Graphite Web Basic mod_wsgi vhost
+
+<VirtualHost *:80>
+
+    ServerName graphit.com                                              # <--------- ServerName
+
+    DocumentRoot "/usr/share/graphite/webapp"
+    ErrorLog /var/log/httpd/graphite-error.log
+    CustomLog /var/log/httpd/graphite-access.log common
+    Alias /media/ "/usr/lib/python2.6/site-packages/django/contrib/admin/media/"
+
+    WSGIScriptAlias / /usr/share/graphite/graphite-web.wsgi
+    WSGIImportScript /usr/share/graphite/graphite-web.wsgi process-group=%{GLOBAL} application-group=%{GLOBAL}
+
+    ## change the URL below to the GRAFANA cname/alias being used for this server
+    Header set Access-Control-Allow-Origin "http://graphite.com"            # <--------------------- Access-Control-Allow-Origin
+    Header set Access-Control-Allow-Methods "GET, OPTIONS"
+    Header set Access-Control-Allow-Headers "origin, authorization, accept"
+
+    <Location "/content/">
+        SetHandler None
+    </Location>
+
+    <Location "/media/">
+        SetHandler None
+    </Location>
+
+</VirtualHost>
+
+
+Set ServerName to the grafana fqdn
+example /etc/httpd/conf.d/02_grafana.conf file
+
+
+<VirtualHost *:80>
+
+    # change this ServerName to the fqdn of the GRAFANA server's cname/alias being used
+    ServerName grafana.com                                             # <------------------ fqdn of grafana
+
+    DocumentRoot "/usr/share/grafana"
+    ErrorLog /var/log/httpd/grafana-error.log
+    CustomLog /var/log/httpd/grafana-access.log common
+
+    ProxyPass /elasticsearch http://localhost:9200
+    ProxyPassReverse /elasticsearch http://localhost:9200
+
+</VirtualHost>
+/usr/share/grafana/config.js
+set graphite url & grafana elasticsearch url parameters
+set data sources with graphite & grafana URL's
+      datasources: {
+        graphite: {
+          type: 'graphite',
+          url: 'http://graphite.com',                     # <------------------- graphite url
+        },
+        elasticsearch: {
+          type: 'elasticsearch',
+          url: 'http://grafana.com/elasticsearch',        # <------------------- grafana url + /elasticsearch
+          index: 'grafana-dash',
+          grafanaDB: true,
+        }
+      },
+	  
+Configure Retention: 
+
+By default, only two days of data is kept, modify with the following steps:
+
+Edit /etc/carbon/storage-schemas.conf to add the following:
+[3min_1month]
+pattern = ^.*\.3min\..*
+retentions = 3m:30d
+
+If Statistics have already been collected with the defualt Retention configuration, .wsp files will have to be resized:
+find & resize the .wsp files
+find /var/lib/carbon/whisper/converge/3min/ -name '*.wsp' -exec /usr/bin/whisper-resize --nobackup {} 3m:30d \;
+
+Be sure permissions are still carbon:carbon 
+chown -R carbon:carbon /var/lib/carbon/whisper/converge/3min/
+restart the carbon-cache daemon
+/etc/init.d/carbon-cache restart. 
