@@ -33,11 +33,7 @@
        - MySQL-python
 
   - name: download get-pip 
-    get_url: 
-        url: https://bootstrap.pypa.io/get-pip.py
-        dest: /var/tmp/ 
-        mode: 0755 
-        validate_certs: no
+    get_url: url=https://bootstrap.pypa.io/get-pip.py dest=/var/tmp/  mode: 0755  validate_certs: no
 
   - name: run get-pip.py to install pip
     shell: /usr/bin/python /var/tmp/get-pip.py 
@@ -56,13 +52,8 @@
 
   # Only if NOT using the --install-lib option above
   - name: Add graphite python site-packages directory to python path (mkdir for lib.pth file) (/root/.local/lib/python2.7/site-packages/)
-    file:
-        path: /root/.local/lib/python2.7/site-packages/
-        state: directory
-        mode: 0755
-        owner: root
-        group: root
-
+    file: path=/root/.local/lib/python2.7/site-packages/ mode=0755 owner=root group=root state=directory
+    
   # Only if NOT using the --install-lib option above
   - name: make lib.pth file which contains the python path
     shell: echo /opt/graphite/lib/python2.7/site-packages/ > /root/.local/lib/python2.7/site-packages/lib.pth
@@ -73,119 +64,67 @@
 
   # Destination of local_settings depends on where the intall-lib directory is... /opt/graphite/webapp/ or /usr/lib/python2.7/site-packages
   - name: copy /opt/graphite/webapp/graphite/local_settings.py
-    copy: 
-        src: ./files/graphite-9.15/webapp_graphite_local_settings.py 
-        dest: /opt/graphite/webapp/graphite/local_settings.py  
-        # dest: /usr/lib/python2.7/site-packages/graphite/local_settings.py
-        mode: 0644
-        group: apache
-        owner: apache
+    copy: src=./files/graphite-9.15/webapp_graphite_local_settings.py dest=/opt/graphite/webapp/graphite/local_settings.py  group=apache owner=apache mode=0644
 
   - name: set permissions
-    file:
-        path: /opt/graphite/storage/whisper
-        owner: carbon
-        group: carbon
-    #shell: chown -R carbon:carbon /opt/graphite/storage/whisper
+    file: path=/opt/graphite/storage/whisper owner=carbon group=carbon
 
   - name: set permissions on webapp dir
-    file:
-        path: /opt/graphite/storage/log/webapp/
-        owner: apache
-        group: apache
-    #shell: chown -R apache:apache /opt/graphite/storage/log/webapp/
+    file: path=/opt/graphite/storage/log/webapp/ owner=apache group=apache
 
-  #
-  # Begin MySQL installation
-  ############################
-
+  # Begin MySQL installation 
+  
   - name: mysql - download the mysql yum repository ...  mysql57-community-release-el7.7
-    get_url: 
-        dest: /var/tmp/ 
-        url: http://dev.mysql.com/get/mysql57-community-release-el7-7.noarch.rpm validate_certs=no
-
+    get_url: url=http://dev.mysql.com/get/mysql57-community-release-el7-7.noarch.rpm   dest=/var/tmp/ validate_certs=no
+ 
   - name: mysql -  install mysql yum repository that was just downloaded
-    #shell: yum localinstall mysql57-community-release-el7-7.noarch.rpm
     shell: rpm -Uvhl mysql57-community-release-el7-7.noarch.rpm chdir=/var/tmp/
 
   - name: mysql - install mysql-community via yum
-    yum: 
-        name: mysql-community-server-5.7.10-1.el7.x86_64
-        state: latest
-    #shell: sudo yum localinstall mysql57-community-release-el7-{version-number}.noarch.rpm
+    yum: name=mysql-community-server-5.7.10-1.el7.x86_64 state=latest
 
   - name: mysql - start mysqld service
-    service: 
-        name: mysqld
-        enabled: yes
-        state: started
-    #shell: systemctl start mysqld.service
+    service: name=mysqld state=started enabled=yes
 
-  - name: mysql - get temp password
-    shell: grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}'
-    register: mysql_pw
+  - name: Update root user password for all root accounts
+    mysql_user: name=root host="{{ item }}" password="{{ Password1 }}" priv=*.*:ALL,GRANT
+    with_items:
+      - "{{ ansible_fqdn }}"
+      - "127.0.0.1"
+      - "::1"
+      - "localhost"
 
-  - name: mysql - Set root user password
-    shell: mysql -u root -p'{{ mysql_pw.stdout }}' --connect-expired-password -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'P@ssw0rd'";
-    ignore_errors: yes
-
-  - name: mysql - remove anonymous user
-    shell: mysql -u root -pP@ssw0rd -e "DROP USER ''@'localhost';"
-    ignore_errors: yes
-
-  - name: mysql - disallow root login remotely
-    shell: mysql -u root -pP@ssw0rd -e "DELETE FROM mysql.user WHERE User='root' AND Host!='localhost';"
-    ignore_errors: yes
-
-  - name: mysql - reload privilege table
-    shell: mysql -uroot -pP@ssw0rd  -e "FLUSH PRIVILEGES;"
-    ignore_errors: yes
+  - name: Ensure anonymous users are not in the database
+    mysql_user: name='' host={{ item }} state=absent
+    with_items:
+      - localhost
+      - "{{ inventory_hostname }}"
 
   - name: mysql - graphite db - copy file used in next step to create graphite db and user
-    copy: 
-        src: ./files/graphite-9.15/mysql_create_graphite_db.in
-        dest: /tmp/mysql_create_graphite_db.in
-    #copy: src=./files/graphite-9.15/mysql_create_graphite_db.in dest=/tmp/mysql_create_graphite_db.in
-
+    copy: src=./files/graphite-9.15/mysql_create_graphite_db.in dest=/tmp/mysql_create_graphite_db.in
+        
   - name: mysql - graphite db -  create graphite db & user
-    shell: mysql -pP@ssw0rd < /tmp/mysql_create_graphite_db.in
+    shell: mysql -pPassword1 < /tmp/mysql_create_graphite_db.in
 
   - name: mysql - graphite db - create tables with syncdb
     shell: PYTHONPATH=/opt/graphite/webapp /usr/lib/python2.7/site-packages/django/bin/django-admin.py syncdb --settings=graphite.settings  --noinput
 
   - name: graphite - copy carbon.conf
-    copy: 
-        src: ./files/graphite-9.15/carbon.conf
-        dest: /opt/graphite/conf/carbon.conf
-    #copy: src=./files/graphite-9.15/carbon.conf dest=/opt/graphite/conf/carbon.conf
-
+    copy: src=./files/graphite-9.15/carbon.conf dest=/opt/graphite/conf/carbon.conf
+        
   - name: copy /opt/graphite/conf/storage-schemas.conf
-    copy: 
-        src: ./files/graphite-9.15/storage-schemas.conf
-        dest: /opt/graphite/conf/storage-schemas.conf
-
+    copy: src=./files/graphite-9.15/storage-schemas.conf dest=/opt/graphite/conf/storage-schemas.conf
+        
   - name: copy /opt/graphite/conf/graphite.wsgi
-    copy: 
-        src: ./files/graphite-9.15/graphite.wsgi
-        dest: /opt/graphite/conf/graphite.wsgi
-        mode: 0755
+    copy: src=./files/graphite-9.15/graphite.wsgi dest=/opt/graphite/conf/graphite.wsgi mode=0755
 
   - name: chown log/webapp
-    file:
-        path: /opt/graphite/storage/log/webapp/
-        owner: apache
-        group: apache
-    #shell: chown -R apache:apache /opt/graphite/storage/log/webapp/
+    file: path=/opt/graphite/storage/log/webapp/ owner=apache group=apache mode=0775
 
   - name: chown /opt/graphite/storage
-    file:
-        path: /opt/graphite/storage/
-        owner: apache
-        group: apache
-    #shell: chown apache:apache /opt/graphite/storage/
-
-  # /opt/graphite/conf/storage-aggregation.conf.example
-  # move it to /opt/graphite/conf/storage-aggregation.conf
+    file: path=/opt/graphite/storage/ owner=apache group=apache mode=0775
+ 
+  # /opt/graphite/conf/storage-aggregation.conf.example move it to /opt/graphite/conf/storage-aggregation.conf
   - name: move example file to storage-aggregation.conf
     shell: cp -p /opt/graphite/conf/storage-aggregation.conf.example /opt/graphite/conf/storage-aggregation.conf
 
@@ -197,41 +136,23 @@
   - name: move whisper 
     shell: cp -pR /opt/graphite/lib/python2.7/site-packages/* /usr/lib/python2.7/site-packages/
 
-  #
   # Carbon complete..  move to Apache
   ############ 
 
   - name: chown apache opt/graphite/storage/log/webapp/
-    file:
-        path: /opt/graphite/storage/log/webapp/
-        owner: apache
-        group: apache
-    #shell: chown -R apache:apache /opt/graphite/storage/log/webapp/
+    file: path=/opt/graphite/storage/log/webapp/ owner=apache group=apache mode=0755
 
   - name: chown apache /opt/graphite/storage
-    file:
-        path: /opt/graphite/storage/
-        owner: apache
-        group: apache
-    #shell: chown apache:apache /opt/graphite/storage/
-
-  #- name: copy http.conf
-  #  copy: src=./files/graphite-9.15/httpd.conf dest=/etc/httpd/conf/httpd.conf
-
+    file: path=/opt/graphite/storage/ owner=apache group=apache mode=0755
+  
   - name: copy graphite http conf
-    copy: 
-        src: ./files/graphite-9.15/01_graphite.conf
-        dest: /etc/httpd/conf.d/01_graphite.conf
-    #copy: src=./files/graphite-9.15/01_graphite.conf dest=/etc/httpd/conf.d/01_graphite.conf
-
+    copy: src=./files/graphite-9.15/01_graphite.conf dest=/etc/httpd/conf.d/01_graphite.conf mode=0755
+   
   - name: modify 01_graphite.conf to have correct ip in /grafana redirect
     shell: sed -i s/127.0.0.1/{{ ansible_eth0.ipv4.address }}/ /etc/httpd/conf.d/01_graphite.conf
 
   - name: start apache
     shell: /sbin/apachectl start
-
-  #- name: start Apache
-  #  shell: /etc/init.d/httpd start
 
   #
   # Apache base & carbon complete..  move to grafana
@@ -241,18 +162,7 @@
     shell: yum -y install https://grafanarel.s3.amazonaws.com/builds/grafana-2.6.0-1.x86_64.rpm
 
   - name: copy grafana.ini to /etc/grafana/grafana.ini
-    copy: 
-        src: ./files/graphite-9.15/grafana.ini
-        dest: /etc/grafana/grafana.ini
-        owner: root
-        group: grafana
-        mode: 0640
+    copy: src=./files/graphite-9.15/grafana.ini dest=/etc/grafana/grafana.ini owner=root group=grafana mode=0640
 
   - name: start the grafana server via systemctl
-    service: 
-        name: grafana-server
-        state: started
-    #shell: systemctl start grafana-server
-
-  #- name: enable grafana to run at boot
-  #  shell: systemctl enable grafana-server.service
+    service: name=grafana-server state=started enabled=yes
